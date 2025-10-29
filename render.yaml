@@ -1,0 +1,21 @@
+databases:
+  - name: prime-credit-business-db
+
+services:
+  - type: web
+    name: prime-credit-business-app
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+      - key: ADMIN_EMAIL
+        value: admin@example.com
+      - key: ADMIN_PASSWORD
+        value: ChangeMe123!
+      - key: DATABASE_URL
+        fromDatabase:
+          name: prime-credit-business-db
+          property: connectionString
