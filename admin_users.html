@@ -1,0 +1,14 @@
+{% extends 'base.html' %}{% block content %}
+<h2>User Management</h2>
+<form method="post">
+<input name="email" placeholder="Email"><br>
+<input name="password" placeholder="Password"><br>
+<select name="role"><option>user</option><option>admin</option></select><br>
+<button>Add User</button>
+</form>
+<ul>
+{% for u in users %}
+<li>{{u.email}} - {{u.role}}{% if u.id!=current_user.id %} <a href="{{url_for('delete_user',user_id=u.id)}}">Delete</a>{% endif %}</li>
+{% endfor %}
+</ul>
+{% endblock %}
