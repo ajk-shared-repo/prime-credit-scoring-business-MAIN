@@ -1,13 +1,7 @@
 {% extends 'base.html' %}{% block content %}
 <h2>New Business Credit Report</h2>
 <form method="post">
-{% for cat, rows in grouped.items() %}
-<h3>{{cat}}</h3>
-{% for r in rows %}
-<label>{{r['Variable']}}</label><br>
-<input name="{{r['Variable']}}"><br>
-{% endfor %}
-{% endfor %}
+<label>Business_Name</label><br><input name="Business_Name"><br>
 <button>Generate</button>
 </form>
 {% endblock %}

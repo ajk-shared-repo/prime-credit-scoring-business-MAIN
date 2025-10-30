@@ -1,11 +1,7 @@
 <!doctype html><html><body>
 {% if current_user.is_authenticated %}
-Logged in as {{current_user.email}} ({{current_user.role}}) |
-<a href="{{url_for('logout')}}">Logout</a>
-<hr>
+Logged in as {{current_user.email}} ({{current_user.role}}) | <a href="{{url_for('logout')}}">Logout</a><hr>
 {% endif %}
-{% with messages = get_flashed_messages() %}
-{% for m in messages %}<div style="color:red">{{m}}</div>{% endfor %}
-{% endwith %}
+{% with messages = get_flashed_messages() %}{% for m in messages %}<div style="color:red">{{m}}</div>{% endfor %}{% endwith %}
 {% block content %}{% endblock %}
 </body></html>
