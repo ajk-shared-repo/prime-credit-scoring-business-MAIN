@@ -1,0 +1,10 @@
+<!doctype html><html><body>
+{% if current_user.is_authenticated %}
+<a href="{{url_for('logout')}}">Logout</a>
+{% else %}
+<a href="{{url_for('login')}}">Login</a>
+{% endif %}
+<hr>
+{% with messages = get_flashed_messages() %}{% for m in messages %}<div>{{m}}</div>{% endfor %}{% endwith %}
+{% block content %}{% endblock %}
+</body></html>

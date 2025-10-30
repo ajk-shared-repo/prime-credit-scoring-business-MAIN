@@ -1,0 +1,5 @@
+{% extends 'base.html' %}{% block content %}
+<h3>Users</h3>
+<form method="post"><input name="email"><input name="password"><select name="role"><option>user</option><option>admin</option></select><button>Add</button></form>
+<ul>{% for u in users %}<li>{{u.email}} ({{u.role}})</li>{% endfor %}</ul>
+{% endblock %}
