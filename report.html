@@ -1,0 +1,12 @@
+{% extends 'base.html' %}{% block title %}Business Report{% endblock %}{% block content %}
+<h2>Business Credit Report</h2>
+<p><strong>Business:</strong> {{ report.business_name }}</p>
+<p><strong>Score:</strong> {{ report.score }} / 100</p>
+<a class="btn" href="{{ url_for('download_pdf', report_id=report.id) }}">Download PDF</a>
+<table style="width:100%;margin-top:12px;border-collapse:collapse">
+<tr><th align="left">Field</th><th align="left">Value</th><th align="left">Weight</th></tr>
+{% for d in report.details %}
+<tr><td>{{ d.variable }}</td><td>{{ d.value }}</td><td>{{ d.weight }}%</td></tr>
+{% endfor %}
+</table>
+{% endblock %}
