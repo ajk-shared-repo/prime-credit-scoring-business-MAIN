@@ -1,9 +1,0 @@
-{% extends 'base.html' %}{% block content %}
-{% if current_user.is_authenticated %}
-<a href="{{url_for('create_report')}}">Create Business Credit Report</a> |
-<a href="{{url_for('admin_users')}}">Manage Users</a> |
-<a href="{{url_for('admin_schema')}}">Upload Template</a>
-{% else %}
-<p>Welcome. <a href="{{url_for('login')}}">Sign in</a> to continue.</p>
-{% endif %}
-{% endblock %}
