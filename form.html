@@ -1,0 +1,9 @@
+{% extends 'base.html' %}{% block content %}
+<h3>Create Report</h3>
+<form method="post">
+{% for row in rows %}
+<label>{{ row['Variable'] }}</label><input name="{{ row['Variable'] }}"><br>
+{% endfor %}
+<button>Generate</button>
+</form>
+{% endblock %}
