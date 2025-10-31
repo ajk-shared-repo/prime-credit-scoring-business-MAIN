@@ -1,0 +1,11 @@
+<!doctype html><html><head>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head><body><div class="container">
+{% if current_user.is_authenticated %}
+<div style="text-align:right">Signed in as {{current_user.email}} ({{current_user.role}}) • <a href="{{url_for('logout')}}">Logout</a></div>
+{% else %}
+<div style="text-align:right"><a href="{{url_for('login')}}">Sign in</a></div>
+{% endif %}<hr>
+{% with messages = get_flashed_messages() %}{% for m in messages %}<div>{{m}}</div>{% endfor %}{% endwith %}
+{% block content %}{% endblock %}
+</div></body></html>
