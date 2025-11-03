@@ -1,0 +1,10 @@
+{% extends 'base.html' %}{% block content %}
+<h3>Users</h3>
+<form method="post">
+  <label>Email</label><input name="email" placeholder="Email" required>
+  <label>Password</label><input name="password" placeholder="Password" required>
+  <label>Role</label><select name="role"><option value="user">user</option><option value="admin">admin</option></select>
+  <button>Add</button>
+</form>
+<ul>{% for u in users %}<li>{{ u.email }} ({{ u.role }})</li>{% endfor %}</ul>
+{% endblock %}

@@ -1,0 +1,7 @@
+{% extends 'base.html' %}{% block content %}
+<h3>Upload New Template</h3>
+<form method="post" enctype="multipart/form-data">
+  <input type="file" name="file" accept=".xlsx" required>
+  <button>Upload</button>
+</form>
+{% endblock %}
