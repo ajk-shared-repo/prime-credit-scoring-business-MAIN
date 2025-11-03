@@ -1,0 +1,6 @@
+{% extends 'base.html' %}{% block content %}
+<h3>Report</h3>
+<p>Business: {{ report.business_name }} | Score: {{ report.score }} / 100</p>
+<p><a href="{{ url_for('download_pdf', report_id=report.id) }}">Download PDF</a></p>
+<ul>{% for d in report.details %}<li>{{ d.variable }}: {{ d.value }} ({{ d.weight }}%)</li>{% endfor %}</ul>
+{% endblock %}
