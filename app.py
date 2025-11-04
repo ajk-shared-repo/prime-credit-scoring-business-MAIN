@@ -1,201 +1,228 @@
-import os, json, logging
-from datetime import datetime
-from io import BytesIO
-import pandas as pd
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file, Response
+
+import os
+from pathlib import Path
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, login_user, login_required, logout_user, current_user, UserMixin
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user, UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
-from reportlab.lib.styles import getSampleStyleSheet
-from jinja2 import TemplateNotFound
+from datetime import datetime
+import pandas as pd
+from io import BytesIO
+from reportlab.lib.pagesizes import LETTER
+from reportlab.pdfgen import canvas
 
-def normalize_db_url(url):
-    if url and url.startswith("postgres://"):
-        return url.replace("postgres://", "postgresql+psycopg://", 1)
-    return url
+BASE_DIR = Path(__file__).resolve().parent
+TEMPLATES_DIR = BASE_DIR / "templates"
+STATIC_DIR = BASE_DIR / "static"
+DATA_DIR = BASE_DIR / "data"
+DB_PATH = BASE_DIR / "app.db"
 
-app = Flask(__name__, template_folder="templates", static_folder="static")
-app.config['SECRET_KEY'] = os.getenv("FLASK_SECRET_KEY", "dev")
-app.config['SQLALCHEMY_DATABASE_URI'] = normalize_db_url(os.getenv("DATABASE_URL", "sqlite:///app.db"))
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+print(f"[BOOT] BASE_DIR={BASE_DIR}", flush=True)
+print(f"[BOOT] templates exists? {TEMPLATES_DIR.exists()} contents={list(TEMPLATES_DIR.glob('*')) if TEMPLATES_DIR.exists() else 'N/A'}", flush=True)
 
-logging.basicConfig(level=logging.INFO)
-app.logger.setLevel(logging.INFO)
+if not (TEMPLATES_DIR / "home.html").exists():
+    TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
+    (TEMPLATES_DIR / "home.html").write_text(
+        "<!doctype html><html><body><h1>Prime Business Credit — Home</h1>"
+        "<p>Default home page created at boot because templates/home.html was missing.</p>"
+        "<p><a href='{{ url_for(\"login\") }}'>Login</a> | "
+        "<a href='{{ url_for(\"generate_report\") }}'>Generate Report</a></p>"
+        "</body></html>",
+        encoding="utf-8"
+    )
+    print("[BOOT] Created fallback templates/home.html", flush=True)
+
+app = Flask(__name__, template_folder=str(TEMPLATES_DIR), static_folder=str(STATIC_DIR))
+app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", "change-me-please")
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", f"sqlite:///{DB_PATH}")
+if app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgres://"):
+    app.config["SQLALCHEMY_DATABASE_URI"] = app.config["SQLALCHEMY_DATABASE_URI"].replace("postgres://", "postgresql+psycopg://", 1)
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
-login = LoginManager(app); login.login_view = "login"
+login_manager = LoginManager(app)
+login_manager.login_view = "login"
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False)
+    name = db.Column(db.String(255), nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(20), default="user")
-    def set_password(self, pw): self.password_hash = generate_password_hash(pw)
-    def check_password(self, pw): return check_password_hash(self.password_hash, pw)
+    is_admin = db.Column(db.Boolean, default=False)
 
-class Report(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    business_name = db.Column(db.String(255))
-    payload_json = db.Column(db.Text)
-    score = db.Column(db.Integer, default=0)
-    created = db.Column(db.DateTime, default=datetime.utcnow)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    def set_password(self, raw):
+        self.password_hash = generate_password_hash(raw)
 
-@login.user_loader
-def load_user(uid): return User.query.get(int(uid))
+    def check_password(self, raw):
+        return check_password_hash(self.password_hash, raw)
 
-def ensure_admin():
-    db.create_all()
-    e=os.getenv("ADMIN_EMAIL","admin@example.com"); p=os.getenv("ADMIN_PASSWORD","ChangeMe123!")
-    if not User.query.filter_by(email=e).first():
-        u=User(email=e, role="admin"); u.set_password(p); db.session.add(u); db.session.commit()
+@login_manager.user_loader
+def load_user(user_id):
+    return db.session.get(User, int(user_id))
 
-@app.before_request
-def br(): ensure_admin()
+def ensure_seed_user():
+    if not User.query.first():
+        admin = User(email="admin@example.com", name="Admin", is_admin=True)
+        admin.set_password(os.environ.get("DEFAULT_ADMIN_PASSWORD", "admin123"))
+        user = User(email="user@example.com", name="Demo User", is_admin=False)
+        user.set_password(os.environ.get("DEFAULT_USER_PASSWORD", "user123"))
+        db.session.add_all([admin, user])
+        db.session.commit()
+        print("[BOOT] Seeded default users", flush=True)
 
-SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "data", "Liberia_Business_Credit_Report_Template.xlsx")
+@app.get("/ping")
+def ping():
+    return "ok", 200
 
-def read_schema():
-    if not os.path.exists(SCHEMA_PATH):
-        app.logger.warning("Template missing at %s", SCHEMA_PATH)
-        return pd.DataFrame(columns=["Variable","Description","Field_Type","Suggested_Weight"])
-    df = pd.read_excel(SCHEMA_PATH).copy()
-    cols = {c.lower().strip(): c for c in df.columns}
-    def pick(names, default=None):
-        for n in names:
-            if n.lower() in cols: return cols[n.lower()]
-        return default
-    var_col = pick(["Variable","Field","Name"], df.columns[0] if len(df.columns) else None)
-    desc_col = pick(["Description / Purpose","Description","Desc"], var_col)
-    type_col = pick(["Field Type","Field_Type","Type"], None)
-    weight_col = pick(["Suggested Weight (%)","Suggested_Weight","Weight"], None)
-    if type_col is None:
-        df["Field_Type"]="Text"; type_col="Field_Type"
-    if weight_col is None:
-        df["Suggested_Weight"]=1; weight_col="Suggested_Weight"
-    out = df[[var_col, desc_col, type_col, weight_col]].copy()
-    out.columns = ["Variable","Description","Field_Type","Suggested_Weight"]
-    out = out.fillna("")
-    return out
-
-@app.get("/")
+@app.route("/")
 def index():
-    try:
-        return render_template("home.html")
-    except TemplateNotFound:
-        return Response("<h1>App is up</h1><p>Templates folder not found. Verify repo has /templates/home.html at root.</p>", mimetype="text/html")
+    return render_template("home.html")
 
-@app.route('/login', methods=['GET','POST'])
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method=='POST':
-        u = User.query.filter_by(email=request.form['email'].strip().lower()).first()
-        if u and u.check_password(request.form['password']):
-            login_user(u); return redirect(url_for('index'))
-        flash("Invalid credentials")
-    try:
-        return render_template('login.html')
-    except TemplateNotFound:
-        return Response("<form method='post'><input name='email'><input name='password' type='password'><button>Login</button></form>", mimetype="text/html")
-
-@app.get('/logout')
-@login_required
-def logout(): logout_user(); return redirect(url_for('login'))
-
-def admin_only(f):
-    from functools import wraps
-    @wraps(f)
-    def w(*a,**k):
-        if current_user.role!='admin':
-            flash('Admin access required'); return redirect(url_for('index'))
-        return f(*a,**k)
-    return w
-
-@app.route('/admin/users', methods=['GET','POST'])
-@login_required
-@admin_only
-def admin_users():
-    if request.method=='POST':
-        u=User(email=request.form['email'].strip().lower(), role=request.form.get('role','user'))
-        u.set_password(request.form['password'])
-        db.session.add(u); db.session.commit(); flash('User added')
-    return render_template('admin_users.html', users=User.query.order_by(User.email).all())
-
-@app.route('/admin/schema', methods=['GET','POST'])
-@login_required
-@admin_only
-def admin_schema():
-    if request.method=='POST':
-        f = request.files['file']
-        if f and f.filename.lower().endswith('.xlsx'):
-            os.makedirs(os.path.dirname(SCHEMA_PATH), exist_ok=True)
-            f.save(SCHEMA_PATH); flash('Template updated')
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        user = User.query.filter_by(email=email).first()
+        if user and user.check_password(password):
+            login_user(user)
+            flash("Logged in successfully.", "success")
+            return redirect(url_for("dashboard"))
         else:
-            flash('Upload a .xlsx file')
-    return render_template('admin_schema.html')
+            flash("Invalid credentials.", "danger")
+    return render_template("login.html")
 
-@app.route('/report/create', methods=['GET','POST'])
+@app.get("/logout")
 @login_required
-def create_report():
-    schema = read_schema()
-    rows = schema.to_dict(orient='records')
-    if request.method=='POST':
-        total = float(schema['Suggested_Weight'].astype(float).sum() or 0.0) if len(schema)>0 else 0.0
-        earned = 0.0; details = []; business_name = None
-        for r in rows:
-            var = r['Variable']
-            weight = float(r.get('Suggested_Weight') or 0)
-            val = request.form.get(var, '').strip()
-            if var.lower() in ['business_name','business name','legal_name','legal name']:
-                business_name = val or business_name
-            if val: earned += weight
-            details.append({"variable": var, "value": val, "weight": weight})
-        score = int(round(100 * earned / total)) if total else 0
-        payload = {"details": details}
-        rep = Report(business_name=business_name or "Unknown Business",
-                     payload_json=json.dumps(payload),
-                     score=score,
-                     user_id=current_user.id)
-        db.session.add(rep); db.session.commit()
-        return redirect(url_for('view_report', report_id=rep.id))
-    return render_template('form.html', rows=rows)
+def logout():
+    logout_user()
+    flash("Logged out.", "info")
+    return redirect(url_for("index"))
 
-@app.get('/report/<int:report_id>')
+@app.get("/dashboard")
 @login_required
-def view_report(report_id):
-    r = Report.query.get_or_404(report_id)
-    payload = json.loads(r.payload_json or '{"details": []}')
-    return render_template('report.html', report={
-        "id": r.id, "business_name": r.business_name, "score": r.score,
-        "details": payload.get("details", [])
-    })
+def dashboard():
+    return render_template("dashboard.html", user=current_user)
 
-@app.get('/report/<int:report_id>/download.pdf')
+@app.route("/generate", methods=["GET", "POST"])
 @login_required
-def download_pdf(report_id):
-    r = Report.query.get_or_404(report_id)
-    payload = json.loads(r.payload_json or '{"details": []}')
-    buf = BytesIO()
-    doc = SimpleDocTemplate(buf)
-    styles = getSampleStyleSheet()
-    elems = [
-        Paragraph("Liberia Business Credit Report", styles['Title']),
-        Spacer(1,10),
-        Paragraph(f"Business: {r.business_name}", styles['Normal']),
-        Paragraph(f"Score: {r.score} / 100", styles['Normal']),
-        Spacer(1,10)
-    ]
-    data = [("Field","Value","Weight")]
-    for d in payload.get("details", []):
-        data.append((d["variable"], d["value"], str(d["weight"])))
-    elems.append(Table(data))
-    doc.build(elems)
-    buf.seek(0)
-    return send_file(buf, as_attachment=True, download_name=f"Business_Credit_Report_{r.id}.pdf")
+def generate_report():
+    source = "default"
+    df = None
 
-@app.get('/ping')
-def ping(): return "ok", 200
+    if request.method == "POST":
+        if "file" in request.files and request.files["file"].filename:
+            f = request.files["file"]
+            filename = f.filename.lower()
+            try:
+                if filename.endswith(".xlsx") or filename.endswith(".xls"):
+                    df = pd.read_excel(f)
+                elif filename.endswith(".csv"):
+                    df = pd.read_csv(f)
+                else:
+                    flash("Unsupported file type. Please upload CSV or XLSX.", "warning")
+                    return render_template("form.html")
+                source = "uploaded"
+            except Exception as e:
+                flash(f"Could not read file: {e}", "danger")
+                return render_template("form.html")
+        else:
+            default_xlsx = DATA_DIR / "Liberia_Business_Credit_Report_Template.xlsx"
+            default_csv = DATA_DIR / "Prime_credit_business_attributes.csv"
+            try:
+                if default_xlsx.exists():
+                    df = pd.read_excel(default_xlsx)
+                elif default_csv.exists():
+                    df = pd.read_csv(default_csv)
+                else:
+                    flash("No default template found in /data.", "danger")
+                    return render_template("form.html")
+            except Exception as e:
+                flash(f"Could not read default template: {e}", "danger")
+                return render_template("form.html")
+
+        name_col_candidates = ["Business Name", "Business_Name", "Company", "Legal Name", "Name"]
+        score_col_candidates = ["Credit Score", "Score", "Risk Score"]
+        id_col_candidates = ["Registration No", "Business ID", "Tax ID"]
+
+        def pick_column(cands):
+            for c in cands:
+                for col in df.columns:
+                    if col.strip().lower() == c.strip().lower():
+                        return col
+            return None
+
+        name_col = pick_column(name_col_candidates)
+        score_col = pick_column(score_col_candidates)
+        id_col = pick_column(id_col_candidates)
+
+        row = df.iloc[0].to_dict()
+        business_name = row.get(name_col, "Unknown Business") if name_col else "Unknown Business"
+        business_id = str(row.get(id_col, "N/A")) if id_col else "N/A"
+        score_val = str(row.get(score_col, "N/A")) if score_col else "N/A"
+
+        from io import BytesIO
+        from reportlab.lib.pagesizes import LETTER
+        from reportlab.pdfgen import canvas
+        from datetime import datetime
+
+        pdf_bytes = BytesIO()
+        c = canvas.Canvas(pdf_bytes, pagesize=LETTER)
+        width, height = LETTER
+        y = height - 72
+
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(72, y, "Prime Credit — Business Credit Report")
+        y -= 24
+        c.setFont("Helvetica", 10)
+        c.drawString(72, y, f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}  |  Source: {source}")
+        y -= 36
+
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(72, y, "Business Summary")
+        y -= 18
+        c.setFont("Helvetica", 11)
+        c.drawString(72, y, f"Name: {business_name}")
+        y -= 16
+        c.drawString(72, y, f"Business ID: {business_id}")
+        y -= 16
+        c.drawString(72, y, f"Credit Score: {score_val}")
+        y -= 24
+
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(72, y, "Selected Attributes")
+        y -= 18
+        c.setFont("Helvetica", 9)
+
+        shown = 0
+        for k, v in row.items():
+            if shown >= 20:
+                break
+            text = f"{k}: {v}"
+            c.drawString(72, y, text[:95])
+            y -= 12
+            if y < 96:
+                c.showPage()
+                y = height - 72
+                c.setFont("Helvetica", 9)
+            shown += 1
+
+        c.showPage()
+        c.save()
+        pdf_bytes.seek(0)
+
+        return send_file(
+            pdf_bytes,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=f"business_credit_report_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf",
+        )
+
+    return render_template("form.html")
+
+with app.app_context():
+    db.create_all()
+    ensure_seed_user()
 
 if __name__ == "__main__":
-    with app.app_context(): db.create_all()
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))

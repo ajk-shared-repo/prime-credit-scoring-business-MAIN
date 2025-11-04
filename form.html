@@ -1,10 +1,18 @@
-{% extends 'base.html' %}{% block content %}
-<h3>Create Report</h3>
-<form method="post">
-{% for row in rows %}
-  <label>{{ row['Variable'] }}{% if row['Description'] %} — <small>{{ row['Description'] }}</small>{% endif %}</label>
-  <input name="{{ row['Variable'] }}">
-{% endfor %}
-  <button>Generate</button>
-</form>
+{% extends "base.html" %}
+{% block title %}Generate Report — Prime Business Credit{% endblock %}
+{% block content %}
+  <h2>Generate Business Credit Report</h2>
+  <p>Upload a CSV/XLSX with business attributes, or leave blank to use the default template in <code>/data</code>.</p>
+  <form method="post" enctype="multipart/form-data">
+    <input type="file" name="file" accept=".csv,.xlsx,.xls">
+    <button class="btn" type="submit">Generate PDF</button>
+  </form>
+  <details>
+    <summary>Expected columns (auto-detected if names differ)</summary>
+    <ul>
+      <li><strong>Business Name</strong> (or Company / Legal Name / Name)</li>
+      <li><strong>Registration No</strong> (or Business ID / Tax ID)</li>
+      <li><strong>Credit Score</strong> (or Score / Risk Score)</li>
+    </ul>
+  </details>
 {% endblock %}

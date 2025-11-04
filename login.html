@@ -1,8 +1,15 @@
-{% extends 'base.html' %}{% block content %}
-<h3>Sign in</h3>
-<form method="post">
-  <label>Email</label><input name="email" placeholder="Email" required>
-  <label>Password</label><input type="password" name="password" placeholder="Password" required>
-  <button>Login</button>
-</form>
+{% extends "base.html" %}
+{% block title %}Login — Prime Business Credit{% endblock %}
+{% block content %}
+  <h2>Login</h2>
+  <form method="post">
+    <label>Email</label>
+    <input type="email" name="email" placeholder="you@example.com" required>
+    <label>Password</label>
+    <input type="password" name="password" required>
+    <button class="btn" type="submit">Sign in</button>
+  </form>
+  <p class="muted">Default accounts (for testing):<br>
+  admin@example.com / admin123<br>
+  user@example.com / user123</p>
 {% endblock %}
