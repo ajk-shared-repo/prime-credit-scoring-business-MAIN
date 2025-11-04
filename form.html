@@ -1,18 +1,15 @@
 {% extends "base.html" %}
-{% block title %}Generate Report — Prime Business Credit{% endblock %}
+{% block title %}Generate Business Credit Report{% endblock %}
 {% block content %}
-  <h2>Generate Business Credit Report</h2>
-  <p>Upload a CSV/XLSX with business attributes, or leave blank to use the default template in <code>/data</code>.</p>
+<section class="card">
+  <h2>Generate Report</h2>
   <form method="post" enctype="multipart/form-data">
-    <input type="file" name="file" accept=".csv,.xlsx,.xls">
-    <button class="btn" type="submit">Generate PDF</button>
+    <label class="file">
+      <span>Choose CSV or XLSX (optional – uses sample if omitted):</span>
+      <input type="file" name="file" accept=".csv,.xlsx,.xls">
+    </label>
+    <button class="btn" type="submit">Create PDF</button>
   </form>
-  <details>
-    <summary>Expected columns (auto-detected if names differ)</summary>
-    <ul>
-      <li><strong>Business Name</strong> (or Company / Legal Name / Name)</li>
-      <li><strong>Registration No</strong> (or Business ID / Tax ID)</li>
-      <li><strong>Credit Score</strong> (or Score / Risk Score)</li>
-    </ul>
-  </details>
+  <p class="hint">No upload? The app uses a bundled sample template.</p>
+</section>
 {% endblock %}

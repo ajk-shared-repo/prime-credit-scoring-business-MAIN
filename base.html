@@ -7,33 +7,28 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <header class="site-header">
-    <h1>Prime Business Credit</h1>
+<header class="topbar">
+  <div class="container">
+    <h1 class="brand">Prime Business Credit</h1>
     <nav>
       <a href="{{ url_for('index') }}">Home</a>
-      {% if current_user.is_authenticated %}
-        <a href="{{ url_for('dashboard') }}">Dashboard</a>
-        <a href="{{ url_for('generate_report') }}">Generate Report</a>
-        <a href="{{ url_for('logout') }}">Logout</a>
-      {% else %}
-        <a href="{{ url_for('login') }}">Login</a>
-      {% endif %}
+      <a href="{{ url_for('generate') }}">Generate Report</a>
+      <a href="{{ url_for('ping') }}">Health</a>
     </nav>
-  </header>
-  <main class="content">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="flash">
-          {% for category, message in messages %}
-            <div class="flash-item {{ category }}">{{ message }}</div>
-          {% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
-    {% block content %}{% endblock %}
-  </main>
-  <footer class="site-footer">
-    <small>&copy; {{ 2025 }} Prime Credit</small>
-  </footer>
+  </div>
+</header>
+<main class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <ul class="flash">
+      {% for category, message in messages %}
+        <li class="{{ category }}">{{ message }}</li>
+      {% endfor %}
+      </ul>
+    {% endif %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="footer"><div class="container">© 2025 Prime Credit — Demo</div></footer>
 </body>
 </html>
